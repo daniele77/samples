@@ -1,0 +1,1 @@
+cl /EHa /DWIN32 /I..\..\..\websocket\websocketpp-master /I..\..\..\boost_1_51_0 echo_server.cpp /link /LIBPATH:..\..\..\boost_1_51_0\stage\lib
