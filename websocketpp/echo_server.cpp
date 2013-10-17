@@ -38,8 +38,8 @@ class MyServer
             std::cout << "Timer expired: sending message" << std::endl;
             std::stringstream ss;
             ss << count++;
-            for (auto it : connections)
-                echo_server.send( it, ss.str(), websocketpp::frame::opcode::text );
+            for (con_list::iterator i = connections.begin(); i != connections.end(); ++i )
+                echo_server.send( *i, ss.str(), websocketpp::frame::opcode::text );
             timer = echo_server.set_timer(1000, bind(&MyServer::on_timer,this,_1));
         }
         
@@ -74,7 +74,7 @@ class MyServer
                 echo_server.set_message_handler(bind(&MyServer::on_message,this,&echo_server,::_1,::_2));
 
                 // Listen on port 9002
-                echo_server.listen(9002);
+                echo_server.listen(boost::asio::ip::tcp::v4(),9002);
 
                 // Start the server accept loop
                 echo_server.start_accept();
