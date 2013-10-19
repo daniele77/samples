@@ -2,6 +2,9 @@
 #include <string>
 #include <vector>
 #include <boost/function.hpp>
+#include <boost/lexical_cast.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/bind.hpp>
 
 class Menu; // forward declaration
 
@@ -78,6 +81,37 @@ private:
     const boost::function< void ( void )> function;
 };
 
+template < typename T >
+class Activity1 : public Command
+{
+public:
+    Activity1( const std::string& _name, boost::function< void ( T ) > _function ) : name( _name ), function( _function ) {}
+    bool Exec( const std::string& cmdLine )
+    {
+        std::vector< std::string > strs;
+        boost::split( strs, cmdLine, boost::is_any_of( " \t" ) );
+        if ( strs.size() != 2 ) return false;
+        if ( name == strs[ 0 ] )
+        {
+            try
+            {
+                T arg = boost::lexical_cast< T >( strs[ 1 ] );
+                function( arg );
+            }
+            catch( boost::bad_lexical_cast & )
+            {
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+private:
+    const std::string name;
+    const boost::function< void ( T )> function;
+};
+
 void Cli::Run()
 {
     std::string cmd;
@@ -89,7 +123,6 @@ void Cli::Run()
         if ( !found )
             std::cout << "Command unknown: " << cmd << std::endl;
     }
-    
 }
 
 
@@ -115,8 +148,15 @@ void Start( void )
     std::cout << "Start" << std::endl;
 }
 
+void Run( int x )
+{
+    std::cout << "Run: " << x << std::endl;
+}
+
 int main()
 {
+    using namespace boost;
+
     Cli cli;
         
     Menu rootMenu( &cli, "root" );
@@ -128,6 +168,7 @@ int main()
     Menu cmdMenu( &cli, &rootMenu, "cmd" );
     cmdMenu.Add( new Activity( "stop", Stop ) );
     cmdMenu.Add( new Activity( "start", Start ) );
+    cmdMenu.Add( new Activity1< int >( "run", bind( Run, _1 ) ) );
     
     rootMenu.Add( &statusMenu );
     rootMenu.Add( &cmdMenu );
