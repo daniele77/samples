@@ -17,7 +17,7 @@ class Menu; // forward declaration
 class Cli
 {
 public:
-    Cli() : current( NULL ) {}
+    Cli() : current( NULL ), exitCmd( "exit" ) {}
     void Run();
     void Current( Menu* menu )
     {
@@ -26,6 +26,7 @@ public:
     void Prompt();
 private:
     Menu* current;
+    const std::string exitCmd;
 };
 
 class Command
@@ -126,10 +127,11 @@ private:
 void Cli::Run()
 {
     std::string cmd;
-    while ( cmd != "exit" )
+    while ( true )
     {
         Prompt();
         std::getline( std::cin, cmd );
+        if ( cmd == exitCmd ) break;
         bool found = false;
         found = current -> ScanCmds( cmd );
         if ( !found )
