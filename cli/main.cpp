@@ -23,6 +23,7 @@ public:
     {
         current = menu;
     }
+    void Prompt();
 private:
     Menu* current;
 };
@@ -59,6 +60,10 @@ public:
         if ( parent )
             if ( parent -> Exec( cmdLine ) ) return true;
         return false;
+    }
+    std::string Prompt() const
+    {
+        return name;
     }
 private:
     Cli* cli;
@@ -123,6 +128,7 @@ void Cli::Run()
     std::string cmd;
     while ( cmd != "exit" )
     {
+        Prompt();
         std::getline( std::cin, cmd );
         bool found = false;
         found = current -> ScanCmds( cmd );
@@ -130,6 +136,12 @@ void Cli::Run()
             std::cout << "Command unknown: " << cmd << std::endl;
     }
 }
+
+void Cli::Prompt()
+{
+    std::cout << current -> Prompt() << "> " << std::flush;
+}
+
 
 
 // ###################################################
@@ -149,18 +161,24 @@ void Stop( void )
     std::cout << "Stop" << std::endl;
 }
 
-void Start( void )
-{
-    std::cout << "Start" << std::endl;
-}
-
 void Run( int x )
 {
     std::cout << "Run: " << x << std::endl;
 }
 
+class Application
+{
+public:
+    void Start()
+    {
+        std::cout << "Application::Start" << std::endl;
+    }
+};
+
 int main()
 {
+    Application app;
+
     using namespace boost;
 
     Cli cli;
@@ -173,7 +191,7 @@ int main()
 
     Menu cmdMenu( &cli, &rootMenu, "cmd" );
     cmdMenu.Add( new Activity( "stop", Stop ) );
-    cmdMenu.Add( new Activity( "start", Start ) );
+    cmdMenu.Add( new Activity( "start", bind( &Application::Start, &app ) ) );
     cmdMenu.Add( new Activity1< int >( "run", bind( Run, _1 ) ) );
     
     rootMenu.Add( &statusMenu );
