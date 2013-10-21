@@ -101,7 +101,7 @@ public:
     bool Exec( const std::string& cmdLine )
     {
         std::vector< std::string > strs;
-        boost::split( strs, cmdLine, boost::is_any_of( " \t" ) );
+        boost::split( strs, cmdLine, boost::is_any_of( " \t" ), boost::token_compress_on );
         if ( strs.size() != 2 ) return false;
         if ( name == strs[ 0 ] )
         {
