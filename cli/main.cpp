@@ -32,7 +32,7 @@ private:
 class Command
 {
 public:
-    virtual bool Exec( const std::string& cmdLine ) = 0;
+    virtual bool Exec( const std::vector< std::string >& cmdLine ) = 0;
     virtual ~Command() {}
 };
 
@@ -45,16 +45,16 @@ public:
     {
         cmds.push_back( cmd );
     }
-    bool Exec( const std::string& cmdLine )
+    bool Exec( const std::vector< std::string >& cmdLine )
     {
-        if ( cmdLine == name )
+        if ( cmdLine[ 0 ] == name )
         {
             cli -> Current( this );
             return true;
         }
         return false;
     }
-    bool ScanCmds( const std::string& cmdLine )
+    bool ScanCmds( const std::vector< std::string >& cmdLine )
     {
         for ( Cmds::iterator i = cmds.begin(); i != cmds.end(); ++i )
             if ( ( *i ) -> Exec( cmdLine ) )  return true;
@@ -78,9 +78,9 @@ class FuncCmd : public Command
 {
 public:
     FuncCmd( const std::string& _name, boost::function< void ( void )> _function ) : name( _name ), function( _function ) {}
-    bool Exec( const std::string& cmdLine )
+    bool Exec( const std::vector< std::string >& cmdLine )
     {
-        if ( cmdLine == name )
+        if ( cmdLine[ 0 ] == name )
         {
             function();
             return true;
@@ -98,16 +98,14 @@ class FuncCmd1 : public Command
 {
 public:
     FuncCmd1( const std::string& _name, boost::function< void ( T ) > _function ) : name( _name ), function( _function ) {}
-    bool Exec( const std::string& cmdLine )
+    bool Exec( const std::vector< std::string >& cmdLine )
     {
-        std::vector< std::string > strs;
-        boost::split( strs, cmdLine, boost::is_any_of( " \t" ), boost::token_compress_on );
-        if ( strs.size() != 2 ) return false;
-        if ( name == strs[ 0 ] )
+        if ( cmdLine.size() != 2 ) return false;
+        if ( name == cmdLine[ 0 ] )
         {
             try
             {
-                T arg = boost::lexical_cast< T >( strs[ 1 ] );
+                T arg = boost::lexical_cast< T >( cmdLine[ 1 ] );
                 function( arg );
             }
             catch( boost::bad_lexical_cast & )
@@ -131,11 +129,22 @@ void Cli::Run()
     {
         Prompt();
         std::getline( std::cin, cmd );
-        if ( cmd == exitCmd ) break;
+        std::vector< std::string > strs;
+        boost::split( strs, cmd, boost::is_any_of( " \t" ), boost::token_compress_on );
+        // remove null entries from the vector:
+        strs.erase( 
+            std::remove_if( 
+                strs.begin(), 
+                strs.end(), 
+                boost::bind( &std::string::empty, _1 )
+            ),
+            strs.end()
+        );
+        if ( strs.size() == 0 ) break; // just hit enter
+        if ( strs[ 0 ] == exitCmd ) break;
         bool found = false;
-        found = current -> ScanCmds( cmd );
-        if ( !found )
-            std::cout << "Command unknown: " << cmd << std::endl;
+        found = current -> ScanCmds( strs );
+        if ( !found ) std::cout << "Command unknown: " << cmd << std::endl;
     }
 }
 
@@ -148,24 +157,14 @@ void Cli::Prompt()
 
 // ###################################################
 
-void Show( void )
+void Show( int x )
 {
-    std::cout << "Show" << std::endl;
+    std::cout << "Show: " << x << std::endl;
 }
 
 void Dump( void )
 {
     std::cout << "Dump" << std::endl;
-}
-
-void Stop( void )
-{
-    std::cout << "Stop" << std::endl;
-}
-
-void Run( int x )
-{
-    std::cout << "Run: " << x << std::endl;
 }
 
 class Application
@@ -174,6 +173,14 @@ public:
     void Start()
     {
         std::cout << "Application::Start" << std::endl;
+    }
+    void Stop()
+    {
+        std::cout << "Application::Stop" << std::endl;
+    }
+    void Run( int x )
+    {
+        std::cout << "Application::Run: " << x << std::endl;
     }
 };
 
@@ -188,13 +195,13 @@ int main()
     Menu rootMenu( &cli, "root" );
  
     Menu statusMenu( &cli, &rootMenu, "status" );
-    statusMenu.Add( new FuncCmd( "show", Show ) );
     statusMenu.Add( new FuncCmd( "dump", Dump ) );
+    statusMenu.Add( new FuncCmd1< int >( "show", bind( Show, _1 ) ) );
 
     Menu cmdMenu( &cli, &rootMenu, "cmd" );
-    cmdMenu.Add( new FuncCmd( "stop", Stop ) );
+    cmdMenu.Add( new FuncCmd( "stop", bind( &Application::Stop, &app ) ) );
     cmdMenu.Add( new FuncCmd( "start", bind( &Application::Start, &app ) ) );
-    cmdMenu.Add( new FuncCmd1< int >( "run", bind( Run, _1 ) ) );
+    cmdMenu.Add( new FuncCmd1< int >( "run", bind( &Application::Run, &app, _1 ) ) );
     
     rootMenu.Add( &statusMenu );
     rootMenu.Add( &cmdMenu );
