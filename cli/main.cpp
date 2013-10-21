@@ -74,10 +74,10 @@ private:
     Cmds cmds;
 };
 
-class Activity : public Command
+class FuncCmd : public Command
 {
 public:
-    Activity( const std::string& _name, boost::function< void ( void )> _function ) : name( _name ), function( _function ) {}
+    FuncCmd( const std::string& _name, boost::function< void ( void )> _function ) : name( _name ), function( _function ) {}
     bool Exec( const std::string& cmdLine )
     {
         if ( cmdLine == name )
@@ -94,10 +94,10 @@ private:
 };
 
 template < typename T >
-class Activity1 : public Command
+class FuncCmd1 : public Command
 {
 public:
-    Activity1( const std::string& _name, boost::function< void ( T ) > _function ) : name( _name ), function( _function ) {}
+    FuncCmd1( const std::string& _name, boost::function< void ( T ) > _function ) : name( _name ), function( _function ) {}
     bool Exec( const std::string& cmdLine )
     {
         std::vector< std::string > strs;
@@ -188,13 +188,13 @@ int main()
     Menu rootMenu( &cli, "root" );
  
     Menu statusMenu( &cli, &rootMenu, "status" );
-    statusMenu.Add( new Activity( "show", Show ) );
-    statusMenu.Add( new Activity( "dump", Dump ) );
+    statusMenu.Add( new FuncCmd( "show", Show ) );
+    statusMenu.Add( new FuncCmd( "dump", Dump ) );
 
     Menu cmdMenu( &cli, &rootMenu, "cmd" );
-    cmdMenu.Add( new Activity( "stop", Stop ) );
-    cmdMenu.Add( new Activity( "start", bind( &Application::Start, &app ) ) );
-    cmdMenu.Add( new Activity1< int >( "run", bind( Run, _1 ) ) );
+    cmdMenu.Add( new FuncCmd( "stop", Stop ) );
+    cmdMenu.Add( new FuncCmd( "start", bind( &Application::Start, &app ) ) );
+    cmdMenu.Add( new FuncCmd1< int >( "run", bind( Run, _1 ) ) );
     
     rootMenu.Add( &statusMenu );
     rootMenu.Add( &cmdMenu );
