@@ -63,20 +63,55 @@ public:
     Matrix( size_t rows, size_t cols ) : Table< T >( rows, cols ) {}
 };
 
+/*
+Minimize
+    c x
+Subject to
+    A x = b, x_i >= 0
+    
+Canonical Tableau:
+    1   -tr(c)  0
+    0   A       b
+*/
 template < typename T >
 class SimplexTableau : public Matrix< T >
 {
 public:
     SimplexTableau( size_t rows, size_t cols ) : Matrix< T >( rows, cols ) {}
+    void SetRow( size_t row_index, const T row[] )
+    {
+        for ( size_t i = 0; i < Columns(); ++i )
+            operator()( row_index, i ) = row[ i ];
+    }
 };
 
 int main()
 {
     using namespace std;
 
-    Matrix< int > t( 3, 5 );
-    t( 1, 2 ) = 12;
-    cout << t(1, 2 ) << endl;
+    /*
+    example
+    minimize:
+        Z = -2x -3y -4z
+    subject to:
+        3x + 2y + z <= 10
+        2x + 5y + 3z <= 15
+        x,y,z >= 0
+    
+    canonical tableau:
+        1 2 3 4 0 0 0
+        0 3 2 1 1 0 10
+        0 2 5 3 0 1 15
+    */
+    
+    SimplexTableau< int > st( 3, 7 );
+
+    const int row1[] = { 1, 2, 3, 4, 0, 0, 0 };
+    st.SetRow( 0, row1 );
+    const int row2[] = { 0, 3, 2, 1, 1, 0, 10 };
+    st.SetRow( 1, row2 );
+    const int row3[] = { 0, 2, 5, 3, 0, 1, 15 };
+    st.SetRow( 2, row3 );
     
     return 0;
 }
