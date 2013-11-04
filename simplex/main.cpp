@@ -29,6 +29,7 @@
 
 #include <iostream>
 #include <valarray>
+#include <limits>
 #include <cassert>
 
 template < typename T >
@@ -47,8 +48,25 @@ public:
         // column major
         return data[ column + row * col_num ];
     }
+    T operator()( size_t row, size_t column ) const
+    {
+        assert( row < row_num );
+        assert( column < col_num );
+        // column major
+        return data[ column + row * col_num ];
+    }
+    T& Value( size_t row, size_t col ) { return operator()( row, col ); }
+    T Value( size_t row, size_t col ) const { return operator()( row, col ); }
     size_t Columns() const { return col_num; }
     size_t Rows() const { return row_num; }
+    void Print() const
+    {
+        for ( size_t i = 0; i < data.size(); ++i )
+        {
+            if ( i % col_num == 0 && col_num != 0 ) std::cout << "\n";
+            std::cout << data[ i ] << "\t";
+        }
+    }
 private:
     const size_t row_num;
     const size_t col_num;
@@ -61,6 +79,19 @@ class Matrix : public Table< T >
 {
 public:
     Matrix( size_t rows, size_t cols ) : Table< T >( rows, cols ) {}
+    void DivideRow( size_t row, T d )
+    {
+        assert( row < Rows() );
+        for ( size_t c = 0; c < Columns(); ++c )
+            Value( row, c ) /= d;
+    }
+    void Linear( size_t r, size_t pivRow, T coeff )
+    {
+        assert( r < Rows() );
+        assert( pivRow  < Rows() );
+        for ( size_t c = 0; c < Columns(); ++c )
+            Value( r, c ) += Value( pivRow, c )* coeff;
+    }
 };
 
 /*
@@ -72,6 +103,14 @@ Subject to
 Canonical Tableau:
     1   -tr(c)  0
     0   A       b
+    
+Algorithm:
+    Prendere un valore della prima riga positivo (se non è positivo: fine)
+    Trovare la riga per cui è minimo il rapporto tra il valore dell'ultima colonna e il valore della colonna scelta
+    Il pivot è l'incrocio tra riga e colonna scelta
+    Dividere la riga scelta per il pivot
+    Far diventare 0 ogni valore della colonna scelta tranne il pivot (con combinazioni lineari)
+    Ripetere finché c'è almeno un valore negativo nella prima riga
 */
 template < typename T >
 class SimplexTableau : public Matrix< T >
@@ -80,8 +119,64 @@ public:
     SimplexTableau( size_t rows, size_t cols ) : Matrix< T >( rows, cols ) {}
     void SetRow( size_t row_index, const T row[] )
     {
+        assert( row_index < Rows() );
         for ( size_t i = 0; i < Columns(); ++i )
-            operator()( row_index, i ) = row[ i ];
+            Value( row_index, i ) = row[ i ];
+    }
+    bool IsValid() const
+    {
+        return true;
+    }
+    void Solve( size_t maxIter )
+    {
+        for ( size_t count = 0; count < maxIter; ++count )
+        {
+            // find pivot column:
+            int pivCol = FindPivotColumn();
+
+            if ( pivCol == -1 ) return;
+            assert( pivCol >= 0 && pivCol < Columns() );
+
+            size_t pivRow = 0;
+            
+            // find minimum ratio
+            double minRatio = std::numeric_limits< double >::max();
+            for ( size_t r = 1; r < Rows(); ++r )
+            {
+                if ( Value( r, pivCol ) == 0 ) continue;
+                double ratio = Value( r, Columns() - 1 ) / Value( r, pivCol );
+                if ( ratio < minRatio )
+                {
+                    minRatio = ratio;
+                    pivRow = r;
+                }
+            }
+            assert( pivRow < Rows() );
+
+            // divide pivot row for pivot value
+            DivideRow( pivRow, Value( pivRow, pivCol ) );
+            
+            // scale other rows
+            for ( size_t r = 0; r < Rows(); ++r )
+            {
+                if ( r != pivRow )
+                {
+                    const T coeff = - Value( r, pivCol );
+                    Linear( r, pivRow, coeff );
+                }
+            }
+            
+            Print();
+            std::cout << std::endl;
+        }
+    }
+private:
+    // returns -1 if no negative value found
+    int FindPivotColumn() const
+    {
+        for ( size_t i = 1; i < Columns(); ++i )
+            if ( Value( 0, i ) > 0 ) return i;
+        return -1;
     }
 };
 
@@ -104,14 +199,20 @@ int main()
         0 2 5 3 0 1 15
     */
     
-    SimplexTableau< int > st( 3, 7 );
+    SimplexTableau< double > st( 3, 7 );
 
-    const int row1[] = { 1, 2, 3, 4, 0, 0, 0 };
+    const double row1[] = { 1, 2, 3, 4, 0, 0, 0 };
     st.SetRow( 0, row1 );
-    const int row2[] = { 0, 3, 2, 1, 1, 0, 10 };
+    const double row2[] = { 0, 3, 2, 1, 1, 0, 10 };
     st.SetRow( 1, row2 );
-    const int row3[] = { 0, 2, 5, 3, 0, 1, 15 };
+    const double row3[] = { 0, 2, 5, 3, 0, 1, 15 };
     st.SetRow( 2, row3 );
+    
+    assert( st.IsValid() );
+    
+    st.Solve( 10 );
+    
+    st.Print();
     
     return 0;
 }
