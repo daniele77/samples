@@ -21,6 +21,7 @@ namespace keywords = boost::log::keywords;
 
 void Init()
 {
+    // add a file log
     logging::add_file_log
     (
         keywords::file_name = "basic_%N.log", // file name
@@ -29,12 +30,22 @@ void Init()
         keywords::time_based_rotation = sinks::file::rotation_at_time_point(0, 0, 0), // midnight rotation
         keywords::format = "[%TimeStamp%]: %Message%" // format
     );
-    
+    // add a console log
+    logging::add_console_log
+    (
+        std::clog,
+        keywords::format = "[%TimeStamp% - %ThreadID%]: %Message%", // format
+        keywords::filter = ( logging::trivial::severity >= logging::trivial::warning ) // filter
+    );
+
+    // filters
     logging::core::get() -> set_filter
     (
         logging::trivial::severity >= logging::trivial::info
     );
-    
+
+    // adds the attributes "LineID", "TimeStamp", "ProcessID" and "ThreadID",
+    // available in the format log
     logging::add_common_attributes();
 }
  
