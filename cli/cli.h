@@ -170,6 +170,65 @@ private:
     const boost::function< void ( T )> function;
 };
 
+template < typename T1, typename T2 >
+class FuncCmd2 : public Command
+{
+public:
+    FuncCmd2( const std::string& _name, boost::function< void ( T1, T2 ) > _function ) : Command( _name ), function( _function ) {}
+    bool Exec( const std::vector< std::string >& cmdLine )
+    {
+        if ( cmdLine.size() != 3 ) return false;
+        if ( Name() == cmdLine[ 0 ] )
+        {
+            try
+            {
+                T1 arg1 = boost::lexical_cast< T1 >( cmdLine[ 1 ] );
+                T2 arg2 = boost::lexical_cast< T2 >( cmdLine[ 2 ] );
+                function( arg1, arg2 );
+            }
+            catch( boost::bad_lexical_cast & )
+            {
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+private:
+    const boost::function< void ( T1, T2 )> function;
+};
+
+template < typename T1, typename T2, typename T3 >
+class FuncCmd3 : public Command
+{
+public:
+    FuncCmd3( const std::string& _name, boost::function< void ( T1, T2, T3 ) > _function ) : Command( _name ), function( _function ) {}
+    bool Exec( const std::vector< std::string >& cmdLine )
+    {
+        if ( cmdLine.size() != 4 ) return false;
+        if ( Name() == cmdLine[ 0 ] )
+        {
+            try
+            {
+                T1 arg1 = boost::lexical_cast< T1 >( cmdLine[ 1 ] );
+                T2 arg2 = boost::lexical_cast< T2 >( cmdLine[ 2 ] );
+                T3 arg3 = boost::lexical_cast< T3 >( cmdLine[ 3 ] );
+                function( arg1, arg2, arg3 );
+            }
+            catch( boost::bad_lexical_cast & )
+            {
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+private:
+    const boost::function< void ( T1, T2, T3 )> function;
+};
+
 // ********************************************************************
 
 inline void Cli::Run()

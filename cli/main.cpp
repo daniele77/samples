@@ -58,6 +58,14 @@ public:
     {
         std::cout << "Application::Run: " << x << std::endl;
     }
+    void Play( int x, const std::string& y, double z )
+    {
+        std::cout << "Application::Play: " 
+                  << x << " "
+                  << y << " " 
+                  << z 
+                  << std::endl;
+    }
 };
 
 // ###################################################
@@ -81,6 +89,8 @@ int main()
     cmdMenu.Add( new FuncCmd( "stop", bind( &Application::Stop, &app ) ) );
     cmdMenu.Add( new FuncCmd( "start", bind( &Application::Start, &app ) ) );
     cmdMenu.Add( new FuncCmd1< int >( "run", bind( &Application::Run, &app, _1 ) ) );
+    cmdMenu.Add( new FuncCmd3< int, std::string, double >( "play", bind( &Application::Play, &app, _1, _2, _3 ) ) );
+    cmdMenu.Add( new FuncCmd2< int, std::string >( "play2", bind( &Application::Play, &app, _1, _2, 69.69 ) ) );
     
     rootMenu.Add( &statusMenu );
     rootMenu.Add( &cmdMenu );
