@@ -43,6 +43,11 @@ void Dump( void )
     std::cout << "Dump" << std::endl;
 }
 
+void Table( void )
+{
+    std::cout << "Table" << std::endl;
+}
+
 class Application
 {
 public:
@@ -84,7 +89,11 @@ int main()
     Menu statusMenu( &cli, &rootMenu, "status" );
     statusMenu.Add( new FuncCmd( "dump", Dump ) );
     statusMenu.Add( new FuncCmd1< int >( "show", bind( Show, _1 ) ) );
-
+    
+    Menu fsmMenu( &cli, &statusMenu, "fsm" );
+    fsmMenu.Add( new FuncCmd( "table", Table ) );
+    statusMenu.Add( &fsmMenu );
+    
     Menu cmdMenu( &cli, &rootMenu, "cmd" );
     cmdMenu.Add( new FuncCmd( "stop", bind( &Application::Stop, &app ) ) );
     cmdMenu.Add( new FuncCmd( "start", bind( &Application::Start, &app ) ) );
