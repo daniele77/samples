@@ -41,42 +41,55 @@
 namespace cli
 {
 
+// ********************************************************************
+
 class Menu; // forward declaration
 
 class Cli
 {
 public:
-    Cli() : current( NULL ), exitCmd( "exit" ) {}
+    Cli() : current( NULL ), exitCmd( "exit" ), helpCmd( "help" ) {}
     void Run();
     void Current( Menu* menu )
     {
         current = menu;
     }
-    void Prompt();
 private:
+    void Prompt();
     Menu* current;
     const std::string exitCmd;
+    const std::string helpCmd;
 };
+
+// ********************************************************************
 
 class Command
 {
 public:
+    Command( const std::string& _name ) : name( _name ) {}
     virtual bool Exec( const std::vector< std::string >& cmdLine ) = 0;
     virtual ~Command() {}
+    virtual void Help() { std::cout << " - " << name << std::endl; }
+protected:
+    std::string Name() const { return name; }
+private:
+    const std::string name;
 };
+
+// ********************************************************************
 
 class Menu : public Command
 {
 public:
-    Menu( Cli* _cli, const std::string& _name ) : cli( _cli ), name( _name ), parent( NULL ) {}
-    Menu( Cli* _cli, Menu* _parent, const std::string& _name ) : cli( _cli ), name( _name ), parent( _parent ) {}
+    Menu( Cli* _cli, const std::string& _name ) : Command( _name ), cli( _cli ), parent( NULL ) {}
+    Menu( Cli* _cli, Menu* _parent, const std::string& _name ) : Command( _name ), cli( _cli ), parent( _parent ) {}
     void Add( Command* cmd )
     {
         cmds.push_back( cmd );
     }
     bool Exec( const std::vector< std::string >& cmdLine )
     {
-        if ( cmdLine[ 0 ] == name )
+        if ( cmdLine[ 0 ] == Name() )
         {
             cli -> Current( this );
             return true;
@@ -93,23 +106,31 @@ public:
     }
     std::string Prompt() const
     {
-        return name;
+        return Name();
+    }
+    void MainHelp()
+    {
+        for ( Cmds::iterator i = cmds.begin(); i != cmds.end(); ++i )
+            ( *i ) -> Help();
+        if ( parent )
+            parent -> Help();
     }
 private:
     Cli* cli;
-    const std::string name;
     Menu* parent;
     typedef std::vector< Command* > Cmds;
     Cmds cmds;
 };
 
+// ********************************************************************
+
 class FuncCmd : public Command
 {
 public:
-    FuncCmd( const std::string& _name, boost::function< void ( void )> _function ) : name( _name ), function( _function ) {}
+    FuncCmd( const std::string& _name, boost::function< void ( void )> _function ) : Command( _name ), function( _function ) {}
     bool Exec( const std::vector< std::string >& cmdLine )
     {
-        if ( cmdLine[ 0 ] == name )
+        if ( cmdLine[ 0 ] == Name() )
         {
             function();
             return true;
@@ -118,7 +139,6 @@ public:
         return false;
     }
 private:
-    const std::string name;
     const boost::function< void ( void )> function;
 };
 
@@ -126,11 +146,11 @@ template < typename T >
 class FuncCmd1 : public Command
 {
 public:
-    FuncCmd1( const std::string& _name, boost::function< void ( T ) > _function ) : name( _name ), function( _function ) {}
+    FuncCmd1( const std::string& _name, boost::function< void ( T ) > _function ) : Command( _name ), function( _function ) {}
     bool Exec( const std::vector< std::string >& cmdLine )
     {
         if ( cmdLine.size() != 2 ) return false;
-        if ( name == cmdLine[ 0 ] )
+        if ( Name() == cmdLine[ 0 ] )
         {
             try
             {
@@ -147,9 +167,10 @@ public:
         return false;
     }
 private:
-    const std::string name;
     const boost::function< void ( T )> function;
 };
+
+// ********************************************************************
 
 inline void Cli::Run()
 {
@@ -169,8 +190,13 @@ inline void Cli::Run()
             ),
             strs.end()
         );
-        if ( strs.size() == 0 ) break; // just hit enter
+        if ( strs.size() == 0 ) continue; // just hit enter
         if ( strs[ 0 ] == exitCmd ) break;
+        if ( strs[ 0 ] == helpCmd ) 
+        {
+            current -> MainHelp();
+            continue;
+        }
         bool found = false;
         found = current -> ScanCmds( strs );
         if ( !found ) std::cout << "Command unknown: " << cmd << std::endl;
