@@ -105,7 +105,7 @@ class MyServer
         server echo_server;
         server::timer_ptr timer;
         size_t count;
-        typedef std::set<connection_hdl/*,std::owner_less<connection_hdl>*/ > con_list;
+        typedef std::set<connection_hdl,std::owner_less<connection_hdl> > con_list;
         con_list connections;
 };
 
