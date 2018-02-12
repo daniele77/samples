@@ -74,9 +74,7 @@ struct Token
         int_literal,       // [0-9]+
         char_literal,      // '.'
         string_literal,    // ".*"
-        negation,          // -
-        bitwise_complement,// ~
-        logical_negation,  // !
+        unary_operator,          // -, ~, !
         done               // EOF
     };
     Type type;
@@ -98,9 +96,7 @@ struct Token
             case int_literal: return "<int_literal>"; break;
             case char_literal: return "<char_literal>"; break;
             case string_literal: return "<string_literal>"; break;
-            case negation: return "-"; break;
-            case bitwise_complement: return "~"; break;
-            case logical_negation: return "!"; break;
+            case unary_operator: return "<unary_operator>"; break;
             case done: return "<EOF>"; break;
         }
         return "???"; // can't reach this point
@@ -134,9 +130,9 @@ public:
                 case '}': Consume(); return Token( Token::close_brace ); break;
                 case ';': Consume(); return Token( Token::semicolon ); break;
                 case '=': Consume(); return Token( Token::assign ); break;
-                case '-': Consume(); return Token( Token::negation ); break;
-                case '~': Consume(); return Token( Token::bitwise_complement ); break;
-                case '!': Consume(); return Token( Token::logical_negation ); break;
+                case '-': Consume(); return Token( Token::unary_operator, "-" ); break;
+                case '~': Consume(); return Token( Token::unary_operator, "~" ); break;
+                case '!': Consume(); return Token( Token::unary_operator, "!" ); break;
                 case '\'': 
                     {
                         Consume(); // '
@@ -229,6 +225,89 @@ private:
 
 /////////////////////////////////////////////////////////////
 
+using namespace std;
+
+namespace AST
+{
+    class Node
+    {
+    public:
+        virtual ~Node() = default;
+        virtual void Emit(ostream& out) = 0;
+    };
+
+    class IntLiteral : public Node
+    {
+    public:
+        explicit IntLiteral(const string& _value) : value(_value) {}
+        void Emit(ostream& out) override { out << "movl $" << value << ", %eax\n"; }
+    private:
+        const string value;
+    };
+
+    class Return : public Node
+    {
+    public:
+        explicit Return(unique_ptr<Node> _exp) : exp(move(_exp)) {}
+        void Emit(ostream& out) override
+        { 
+            exp->Emit(out);
+            out << "ret\n";
+        }
+    private:
+        unique_ptr<Node> exp;
+    };
+
+    class UnaryOperation : public Node
+    {
+    public:
+        UnaryOperation(const string& op, unique_ptr<Node> _innerExpression) : 
+            operation(op), innerExpression(move(_innerExpression)) {}
+        void Emit(ostream& out) override
+        {
+            innerExpression->Emit(out);
+            if (operation == "-")
+            {
+                out << "neg %eax\n";
+            }
+            else if (operation == "~")
+            {
+                out << "not %eax\n";                
+            }
+            else if (operation == "!")
+            {
+                out << "cmpl $0, %eax\n";
+                out << "movl $0, %eax\n";
+                out << "sete %al\n";
+            }
+            else
+                assert(false);
+
+        }
+    private:
+        const string operation;
+        unique_ptr<Node> innerExpression;
+    };
+
+    class Function : public Node
+    {
+    public:
+        Function(const string& _funcName, unique_ptr<Node> _body) : funcName(_funcName), body(move(_body)) {}
+        void Emit(ostream& out) override
+        { 
+            out <<
+                ".globl " + funcName + "\n"
+                "" + funcName + ":\n";
+            body->Emit(out);
+        }
+    private:
+        const string funcName;
+        unique_ptr<Node> body;
+    };
+};
+
+////////////////////////////////////////////////////////////////////
+
 /*
 GRAMMAR
 
@@ -240,18 +319,19 @@ GRAMMAR
 
 */
 
-template <typename SemanticActions>
 class Grammar
 {
 public:
-    Grammar(std::istream& in, SemanticActions& sa) : 
-        input(in), lookahead(Token::done), actions(sa) 
+    using NodePtr = unique_ptr<AST::Node>;
+
+    explicit Grammar(std::istream& in) : 
+        input(in), lookahead(Token::done)
     {}
 
     // throws SyntaxError
     // <program> ::= <function>
     // <function> ::= "int" <id> "(" ")" "{" <statement> "}"
-    void Parse()
+    NodePtr Parse()
     {
         lookahead = input.Next();
         Match(Token::keyword);
@@ -260,35 +340,48 @@ public:
         Match(Token::open_parenthesis);
         Match(Token::close_parenthesis);
         Match(Token::open_brace);
-        Statement();
+        auto stmt = Statement();
         Match(Token::close_brace);
         Match(Token::done);
-        actions.Function(funName);
+        return make_unique<AST::Function>(funName, move(stmt));
     }
 private:
+
     // <statement> ::= "return" <exp> ";"
-    void Statement()
+    NodePtr Statement()
     {
         const std::string returnKeyword = NextLexem();
         if (returnKeyword != "return")
             throw SyntaxError( "expecting return, got " + returnKeyword, input.Line(), input.Col() );
         Match(Token::keyword);
-        Expression();
+        auto exp = Expression();
         Match(Token::semicolon);
-        actions.Return();
+        return make_unique<AST::Return>(move(exp));
     }
 
     // <exp> ::= <unary_op> <exp> | <int_literal>
-    void Expression()
+    NodePtr Expression()
     {
-        if (lookahead.type == Token::int_literal)
+        switch (lookahead.type)
         {
-            const std::string intLiteral = NextLexem();
-            Match(Token::int_literal);
-            actions.IntLiteral(intLiteral);
+            case Token::int_literal:
+            {
+                const std::string intLiteral = NextLexem();
+                Match(Token::int_literal);
+                return make_unique<AST::IntLiteral>(intLiteral);
+                break;
+            }
+            case Token::unary_operator:
+            {
+                const std::string operation = NextLexem();            
+                Match(Token::unary_operator);
+                auto innerExp = Expression();
+                return make_unique<AST::UnaryOperation>(operation, move(innerExp));
+                break;
+            }
+            default:
+                throw SyntaxError( "Expecting int literal or unary operator. Got " + Token::Description(lookahead.type), input.Line(), input.Col() );                    
         }
-        else // TODO
-            throw SyntaxError( "expecting int literal, got " + Token::Description(lookahead.type), input.Line(), input.Col() );        
     }
 
 #if 0
@@ -363,109 +456,6 @@ private:
     }
     TokenSource input;
     Token lookahead;
-    SemanticActions& actions;
-};
-
-/////////////////////////////////////////////////////////////
-
-using namespace std;
-
-class DumpActions {};
-
-namespace AST
-{
-    class Node
-    {
-    public:
-        virtual ~Node() = default;
-        virtual void Emit(ostream& out) = 0;
-    };
-
-    class IntLiteral : public Node
-    {
-    public:
-        explicit IntLiteral(const string& _value) : value(_value) {}
-        void Emit(ostream& out) override { out << "movl $" << value << ", %eax\n"; }
-    private:
-        const string value;
-    };
-
-    class Return : public Node
-    {
-    public:
-        explicit Return(unique_ptr<Node> _exp) : exp(move(_exp)) {}
-        void Emit(ostream& out) override
-        { 
-            exp->Emit(out);
-            out << "ret\n";
-        }
-    private:
-        unique_ptr<Node> exp;
-    };
-
-    class Function : public Node
-    {
-    public:
-        Function(const string& _funcName, unique_ptr<Node> _body) : funcName(_funcName), body(move(_body)) {}
-        void Emit(ostream& out) override
-        { 
-            out <<
-                ".globl " + funcName + "\n"
-                "" + funcName + ":\n";
-            body->Emit(out);
-        }
-    private:
-        const string funcName;
-        unique_ptr<Node> body;
-    };
-};
-
-class ASTActions
-{
-public:
-    void Function(const string& funcName)
-    {
-        current = make_unique<AST::Function>(funcName, move(current));        
-    }
-    void Return()
-    {
-        current = make_unique<AST::Return>(move(current));
-    }
-    void IntLiteral(const std::string& value)
-    {
-        current = make_unique<AST::IntLiteral>(value);
-    }
-    void Dump(std::ostream& o) const 
-    {
-        current->Emit(o);
-    }
-private:
-    unique_ptr<AST::Node> current;
-};
-
-class ASMActions
-{
-public:
-    void Prologue()
-    {}
-    void Epilogue()
-    {
-    }
-    void Function(const std::string& funcName)
-    {
-        output +=
-            ".globl " + funcName + "\n"
-            "" + funcName + ":\n";        
-    }
-    void Return(const std::string& value)
-    {
-        output +=
-        "movl $" + value + ", %eax\n"
-        "ret\n";
-    }
-    void Dump(std::ostream& o) const { o << output << std::flush; }
-private:
-    std::string output;
 };
 
 /////////////////////////////////////////////////////////////
@@ -515,23 +505,21 @@ int main(int argc, char* argv[])
         }
 
         //
-        using Actions = ASTActions;
-        Actions actions;
-        //actions.Prologue();
         std::ifstream input(fileName);
         if (!input)
         {
             std::cerr << "File " << fileName << " not found" << std::endl;
             return 1;
         }
-        Grammar<Actions> grammar(input, actions);
-        grammar.Parse();
+        Grammar grammar(input);
+        auto ast = grammar.Parse();
         //actions.Epilogue();
         std::cout << "End Parsing" << std::endl;
 
         fileName = boost::filesystem::change_extension(fileName, ".s").string();
         std::ofstream out(fileName);
-        actions.Dump(out);
+
+        ast->Emit(out);
 
         // 
 
