@@ -74,12 +74,13 @@ struct Token
         int_literal,       // [0-9]+
         char_literal,      // '.'
         string_literal,    // ".*"
-        unary_operator,          // -, ~, !
+        operator_,         // +, -, *, /, ~, !
         done               // EOF
     };
     Type type;
     std::string lexem;
-    Token( Type t, const std::string& l = std::string() ) : type( t ), lexem( l ) {}
+    Token(Type t, const std::string& l = {}) : type( t ), lexem( l ) {}
+    Token(Type t, char c) : type( t ), lexem(1,c) {}
     // return a string explaining the type of a token
     static std::string Description( Type t )
     {
@@ -96,7 +97,7 @@ struct Token
             case int_literal: return "<int_literal>"; break;
             case char_literal: return "<char_literal>"; break;
             case string_literal: return "<string_literal>"; break;
-            case unary_operator: return "<unary_operator>"; break;
+            case operator_: return "<operator>"; break;
             case done: return "<EOF>"; break;
         }
         return "???"; // can't reach this point
@@ -130,9 +131,15 @@ public:
                 case '}': Consume(); return Token( Token::close_brace ); break;
                 case ';': Consume(); return Token( Token::semicolon ); break;
                 case '=': Consume(); return Token( Token::assign ); break;
-                case '-': Consume(); return Token( Token::unary_operator, "-" ); break;
-                case '~': Consume(); return Token( Token::unary_operator, "~" ); break;
-                case '!': Consume(); return Token( Token::unary_operator, "!" ); break;
+                case '-':
+                case '+':
+                case '*':
+                case '/':
+                case '~':
+                case '!': 
+                    Consume(); 
+                    return Token( Token::operator_, c ); 
+                    break;
                 case '\'': 
                     {
                         Consume(); // '
@@ -289,6 +296,56 @@ namespace AST
         unique_ptr<Node> innerExpression;
     };
 
+    class BinaryOp : public Node
+    {
+    public:
+        BinaryOp(const string& op, unique_ptr<Node> _leftExp, unique_ptr<Node> _rightExp) : 
+            operation(op), leftExp(move(_leftExp)), rightExp(move(_rightExp)) {}
+        void Emit(ostream& out) override
+        {
+            if (operation == "*")
+            {
+                leftExp->Emit(out);
+                out << "push %eax\n";
+                rightExp->Emit(out);
+                out << "pop %ecx\n";
+                out << "imul %ecx, %eax\n";
+            }
+            else if (operation == "/")
+            {
+                out << "xor %edx, %edx\n"; // 0 -> EDX
+                rightExp->Emit(out); // rhs -> EAX
+                out << "push %eax\n";
+                leftExp->Emit(out); // lhs -> EAX
+                out << "pop %ecx\n";                
+                out << "idivl %ecx\n"; // EDX:EAX / ECX -> EAX
+            }
+            else if (operation == "+")
+            {
+                leftExp->Emit(out);
+                out << "push %eax\n";
+                rightExp->Emit(out);
+                out << "pop %ecx\n";
+                out << "addl %ecx, %eax\n";
+            }
+            else if (operation == "-")
+            {
+                rightExp->Emit(out);
+                out << "push %eax\n";                
+                leftExp->Emit(out); // eax = lhs
+                out << "pop %ecx\n"; // ecx = lrs                
+                out << "subl %ecx, %eax\n"; // subl src, dst -> dst=dst-src   eax=eax-ecx
+            }
+            else
+                assert(false);
+
+        }
+    private:
+        const string operation;
+        unique_ptr<Node> leftExp;
+        unique_ptr<Node> rightExp;
+    };
+
     class Function : public Node
     {
     public:
@@ -309,12 +366,15 @@ namespace AST
 ////////////////////////////////////////////////////////////////////
 
 /*
+
 GRAMMAR
 
 <program> ::= <function>
 <function> ::= "int" <id> "(" ")" "{" <statement> "}"
 <statement> ::= "return" <exp> ";"
-<exp> ::= <unary_op> <exp> | <int_literal>
+<exp> ::= <term> { ("+" | "-") <term> }
+<term> ::= <factor> { ("*" | "/") <factor> }
+<factor> ::= "(" <exp> ")" | <unary_op> <factor> | <int_literal>
 <unary_op> ::= "!" | "~" | "-"
 
 */
@@ -359,8 +419,39 @@ private:
         return make_unique<AST::Return>(move(exp));
     }
 
-    // <exp> ::= <unary_op> <exp> | <int_literal>
+    // <exp> ::= <term> { ("+" | "-") <term> }
     NodePtr Expression()
+    {
+        auto term = Term();
+        auto next = NextLexem();
+        while (next == "+" || next == "-") // more terms
+        {
+            Match(Token::operator_);
+            auto nextTerm = Term();
+            term = make_unique<AST::BinaryOp>(next, move(term), move(nextTerm));
+            next = NextLexem();                    
+        }
+        return term;
+    }
+
+    // <term> ::= <factor> { ("*" | "/") <factor> }
+    NodePtr Term()
+    {
+        auto factor = Factor();
+        auto next = NextLexem();
+        while (next == "*" || next == "/") // more factors
+        {
+            Match(Token::operator_);
+            auto nextFactor = Factor();
+            factor = make_unique<AST::BinaryOp>(next, move(factor), move(nextFactor));
+            next = NextLexem();        
+        }
+        return factor;
+    }
+
+    // <factor> ::= "(" <exp> ")" | <unary_op> <factor> | <int_literal>
+    // <unary_op> ::= "!" | "~" | "-"    
+    NodePtr Factor()
     {
         switch (lookahead.type)
         {
@@ -371,16 +462,26 @@ private:
                 return make_unique<AST::IntLiteral>(intLiteral);
                 break;
             }
-            case Token::unary_operator:
+            case Token::operator_:
             {
                 const std::string operation = NextLexem();            
-                Match(Token::unary_operator);
+                if ( (operation != "-") && (operation != "~") && (operation != "!") ) // check for unary operators
+                    throw SyntaxError( "Expecting unary operator. Got " + operation, input.Line(), input.Col() );
+                Match(Token::operator_);
+                auto innerFact = Factor();
+                return make_unique<AST::UnaryOperation>(operation, move(innerFact));
+                break;
+            }
+            case Token::open_parenthesis:
+            {
+                Match(Token::open_parenthesis);
                 auto innerExp = Expression();
-                return make_unique<AST::UnaryOperation>(operation, move(innerExp));
+                Match(Token::close_parenthesis);
+                return innerExp;
                 break;
             }
             default:
-                throw SyntaxError( "Expecting int literal or unary operator. Got " + Token::Description(lookahead.type), input.Line(), input.Col() );                    
+                throw SyntaxError( "Expecting int literal, unary operator or (. Got " + Token::Description(lookahead.type), input.Line(), input.Col() );                    
         }
     }
 
