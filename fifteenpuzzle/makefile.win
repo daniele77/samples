@@ -1,0 +1,39 @@
+# Copyright Daniele Pallastrelli 2014.
+# Distributed under the Boost Software License, Version 1.0.
+# (See accompanying file LICENSE or copy at
+# http://www.boost.org/LICENSE_1_0.txt)
+
+#define macros
+EXE_NAME = fifteen.exe
+DIR_INCLUDE = /I%BOOST%
+# COMPILE_FLAGS = /nologo /MD /sdl- /EHsc /GR
+COMPILE_FLAGS = /nologo /MD /sdl- /EHsc /GR /Ox 
+LINK_FLAGS = /NOLOGO /LIBPATH:%BOOST%\stage\lib
+RM = del /F /Q 2> nul
+
+OBJ_FILES= \
+    fifteen.obj
+
+.cpp.obj ::
+    @echo Compiling...
+    cl /c $(COMPILE_FLAGS) $(DIR_INCLUDE) $<
+
+.PHONY: all app clean
+
+# create directories and build application
+all: clean app
+
+$(EXE_NAME) : $(OBJ_FILES)
+	@echo Linking $(EXE_NAME)...
+	link $(LINK_FLAGS) /out:$(EXE_NAME) $(OBJ_FILES)
+
+# application
+
+app: $(EXE_NAME)
+
+# delete output
+clean:
+	@-$(RM) *.obj
+	@-$(RM) *.exp
+	@-$(RM) *.lib
+	@-$(RM) $(EXE_NAME)

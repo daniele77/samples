@@ -5,7 +5,12 @@
 #include <vector>
 #include <algorithm>
 
+#ifndef CLOSED_USE_VECTOR
+#include <unordered_set>
+#endif
+
 // #define DUMP
+// #define CLOSED_USE_VECTOR   // 2800 ms VS 46 ms !!!!!
 
 template <class State>
 class BreadthFirst
@@ -32,6 +37,10 @@ public:
         return false;
     }
     State Solution() const { return solution; }
+    void PrintStatistics() const
+    {
+        std::cout << "Visited states: " << closed.size() << std::endl;
+    }
 private:
     bool NextStep(const State& current)
     {
@@ -43,7 +52,11 @@ private:
 
         if (current == end)
             return true; // found
+#ifdef CLOSED_USE_VECTOR
         closed.push_back(current);
+#else
+        closed.insert(current);
+#endif
         auto nextStates = current.Next();
 
 #ifdef DUMP
@@ -52,7 +65,11 @@ private:
 
         for (auto s: nextStates)
         {
-            if ( std::find(closed.begin(), closed.end(), s) == closed.end() ) // not visited yet
+#ifdef CLOSED_USE_VECTOR
+            if (std::find(closed.begin(), closed.end(), s) == closed.end()) // not visited yet
+#else
+            if ( closed.find(s) == closed.end() ) // not visited yet
+#endif
             {
 #ifdef DUMP
                 s.Print();
@@ -66,7 +83,11 @@ private:
     const State end;
     State solution;
     std::queue<State> open;
+#ifdef CLOSED_USE_VECTOR
     std::vector<State> closed;
+#else
+    std::unordered_set<State> closed;
+#endif
 };
 
 //
@@ -74,6 +95,7 @@ private:
 #include <array>
 #include <cassert>
 #include <iomanip>
+#include <boost/functional/hash.hpp>
 
 class FState
 {
@@ -154,6 +176,10 @@ public:
             std::cout << move << ' ';
         std::cout << std::endl;
     }
+    std::size_t Hash() const
+    {
+        return boost::hash_range(std::begin(configuration), std::end(configuration));
+    }
 private:
     void PrintItem(std::size_t pos) const
     {
@@ -171,6 +197,20 @@ private:
     std::array<int, 16> configuration;
     std::vector<int> moves;
 };
+
+// custom specialization of std::hash can be injected in namespace std
+namespace std
+{
+    template<> struct hash<FState>
+    {
+        typedef FState argument_type;
+        typedef std::size_t result_type;
+        result_type operator()(argument_type const& s) const noexcept
+        {
+            return s.Hash();
+        }
+    };
+}
 
 #include <boost/chrono/chrono.hpp>
 #include <boost/chrono/process_cpu_clocks.hpp>
@@ -202,6 +242,7 @@ int main()
     {
         std::cout << "Solution not found!" << std::endl;
     }
+    search.PrintStatistics();
 
     return 0;
 }
