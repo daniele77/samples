@@ -2,5 +2,5 @@ samples
 =======
 
 Various samples collection.
-This repository is intended to maintein useful samples,
+This repository is intended to maintain useful samples,
 examples, notes about software.
